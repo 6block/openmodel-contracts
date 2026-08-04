@@ -29,7 +29,7 @@ links offline (only the last step reads the chain):
 
 ```bash
 python3 verify-receipt.py http://<gateway>:3001 <request_id> \
-    https://api.node.glif.io/rpc/v1 0x1BB694BD2759eC88Bc04595D9677cb1065fa7D1f
+    https://api.node.glif.io/rpc/v1 0x465d979675d401295C529e15dC9187c9b92ed4d1
 # 1) worker receipt signature ........ OK (ed25519)
 # 2) leaf == sha256(record) .......... OK
 # 3) merkle inclusion proof .......... OK
@@ -74,7 +74,7 @@ Key properties (full rationale in [docs/contract-design.md](docs/contract-design
 | Network | Address | Params |
 |---|---|---|
 | Filecoin Calibration (314159) | `0x83c264c95e7Ad4b30Caa5Bc60e75E317bf109E4F` | fee 5%, refund delay 3600 s — see [deployments/calibration.json](deployments/calibration.json) |
-| Filecoin Mainnet (314) | `0x1BB694BD2759eC88Bc04595D9677cb1065fa7D1f` | trial: fee 0%, refund delay 3600 s — see [deployments/mainnet.json](deployments/mainnet.json) |
+| Filecoin Mainnet (314) | `0x465d979675d401295C529e15dC9187c9b92ed4d1` | trial: fee 0%, refund delay 3600 s, earnings freeze 86400 s — see [deployments/mainnet.json](deployments/mainnet.json) |
 
 `deployments/<network>.json` is the authoritative record binding a chain address
 to the source at a given tag (deploy tx, block, constructor params, roles).
