@@ -2,15 +2,19 @@
   "network": "mainnet",
   "chainId": 314,
   "contract": "OpenModelSettlement",
-  "address": "0x1BB694BD2759eC88Bc04595D9677cb1065fa7D1f",
+  "address": "0x465d979675d401295C529e15dC9187c9b92ed4d1",
   "deployer": "0x3934Ab3DCb874e5dd33768C66f94aa0EcA83DF3b",
   "owner": "0x3934Ab3DCb874e5dd33768C66f94aa0EcA83DF3b",
   "operator": "0x364960D9744364231c0c6577c7D75fB83C052735",
   "platformFeeBps": 0,
   "refundDelaySec": 3600,
-  "stablecoins": [],
-  "deployTx": "0x28154cdb9b5f73b74eaa80b67c5cfa41f551e0790b9d0a9591688d0769dc4a88",
-  "blockNumber": 6187249,
-  "deployedAt": "2026-07-13T00:00:00.000Z",
-  "operatorSetAt": "2026-07-13T07:24:16.564Z"
+  "earningsFreezeSec": 86400,
+  "stablecoins": [
+    "0x80B98d3aa09ffff255c3ba4A241111Ff1262F045"
+  ],
+  "deployTx": "0x592ba4bef2be658cdf0674572680901d796d51587fdbdb6331b82dc77971d654",
+  "blockNumber": 6250355,
+  "deployedAt": "2026-08-04T04:19:07.817Z",
+  "operatorSetAt": "2026-08-04T04:25:07.120Z",
+  "supersedes": "0x1BB694BD2759eC88Bc04595D9677cb1065fa7D1f"
 }
