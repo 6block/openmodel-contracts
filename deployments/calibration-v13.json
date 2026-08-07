@@ -1,0 +1,17 @@
+{
+  "network": "calibration",
+  "chainId": 314159,
+  "version": "v1.3-batch-stats",
+  "address": "0x97a3d202CfF60dD369cdf8F7D514dAe36b469852",
+  "deployTx": "0x070ac3cf370c5dbbcb766122331b30df07188cf58c1fda3105a4130a2b5de39b",
+  "block": 3956059,
+  "platformFeeBps": 500,
+  "refundDelaySec": 3600,
+  "earningsFreezeSec": 604800,
+  "owner": "0x01ac683ab8A0DB80F1f05F79946cc4F65B490a08",
+  "operator": "0x01ac683ab8A0DB80F1f05F79946cc4F65B490a08",
+  "arbiter": "0x01ac683ab8A0DB80F1f05F79946cc4F65B490a08",
+  "deployedAt": "2026-08-06T09:26:01.834Z",
+  "purpose": "v1.3 per-batch inference stats (requestCount/tokenCount + cumulative counters)",
+  "supersedes": "0x5c0ef3F08Cd353cc8722b73fbBB33345b216e53B"
+}

@@ -6,7 +6,10 @@ const { ethers } = require("hardhat");
 const fs = require("fs");
 async function main() {
   const keys = JSON.parse(fs.readFileSync(__dirname + "/../.calib-keys.json"));
-  const C = "0x83c264c95e7Ad4b30Caa5Bc60e75E317bf109E4F";
+  // CONTRACT is required on purpose: a hardcoded default here once funded a retired
+  // instance. Pass the CURRENT contract explicitly.
+  const C = process.env.CONTRACT;
+  if (!C || !/^0x[0-9a-fA-F]{40}$/.test(C)) throw new Error("set CONTRACT=0x<current settlement contract>");
   const z = ethers.ZeroAddress;
   const amount = process.env.DEPOSIT_TFIL || "1";
   const user = new ethers.Wallet(keys.user, ethers.provider);

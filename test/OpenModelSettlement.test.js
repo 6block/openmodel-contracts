@@ -115,7 +115,7 @@ describe("OpenModelSettlement", function () {
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("batch-1"));
 
       await expect(settlement.submitSettlement(
-        [user1.address], [sp1.address], [amount], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [amount], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       )).to.emit(settlement, "SettlementExecuted");
 
       const fee = amount * BigInt(FEE_BPS) / 10000n;
@@ -134,7 +134,7 @@ describe("OpenModelSettlement", function () {
         [user1.address, user2.address],
         [sp1.address, sp2.address],
         amounts,
-        [NATIVE, NATIVE],
+        [NATIVE, NATIVE], ([user1.address, user2.address]).map(() => 0), ([user1.address, user2.address]).map(() => 0),
         detailsHash
       );
 
@@ -150,11 +150,11 @@ describe("OpenModelSettlement", function () {
     it("should reject duplicate detailsHash", async function () {
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("batch-dup"));
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
 
       await expect(settlement.submitSettlement(
-        [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       )).to.be.revertedWith("batch already processed");
     });
 
@@ -167,7 +167,7 @@ describe("OpenModelSettlement", function () {
         [user1.address, user2.address],
         [sp1.address, sp1.address],
         [tooMuch, normal],
-        [NATIVE, NATIVE],
+        [NATIVE, NATIVE], ([user1.address, user2.address]).map(() => 0), ([user1.address, user2.address]).map(() => 0),
         detailsHash
       );
 
@@ -186,21 +186,21 @@ describe("OpenModelSettlement", function () {
 
     it("should reject empty batch", async function () {
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("empty"));
-      await expect(settlement.submitSettlement([], [], [], [], detailsHash))
+      await expect(settlement.submitSettlement([], [], [], [], ([]).map(() => 0), ([]).map(() => 0), detailsHash))
         .to.be.revertedWith("invalid batch size");
     });
 
     it("should reject mismatched array lengths", async function () {
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("mismatch"));
       await expect(settlement.submitSettlement(
-        [user1.address, user2.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], detailsHash
+        [user1.address, user2.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], ([user1.address, user2.address]).map(() => 0), ([user1.address, user2.address]).map(() => 0), detailsHash
       )).to.be.revertedWith("array length mismatch");
     });
 
     it("should reject settlement from a non-operator", async function () {
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("unauth"));
       await expect(settlement.connect(user1).submitSettlement(
-        [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       )).to.be.revertedWith("not operator");
     });
 
@@ -214,7 +214,7 @@ describe("OpenModelSettlement", function () {
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("erc20-batch"));
 
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [settleAmt], [tokenAddr], detailsHash
+        [user1.address], [sp1.address], [settleAmt], [tokenAddr], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
 
       const fee = settleAmt * BigInt(FEE_BPS) / 10000n;
@@ -227,7 +227,7 @@ describe("OpenModelSettlement", function () {
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("record-test"));
 
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [amount], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [amount], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
 
       const record = await settlement.getSettlement(1);
@@ -287,7 +287,7 @@ describe("OpenModelSettlement", function () {
       const settleAmount = ethers.parseEther("3");
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("during-refund"));
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [settleAmount], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [settleAmount], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
 
       // Remaining balance: 10 - 3 = 7
@@ -301,7 +301,7 @@ describe("OpenModelSettlement", function () {
 
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("free-rider"));
       await expect(settlement.submitSettlement(
-        [user1.address], [sp1.address], [ethers.parseEther("4")], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [ethers.parseEther("4")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       )).to.emit(settlement, "SettlementExecuted");
 
       const rec = await settlement.getSettlement(1);
@@ -318,7 +318,7 @@ describe("OpenModelSettlement", function () {
       await settlement.connect(user1).requestRefund(NATIVE, depositAmount); // lock all 10
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("consume-all"));
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [depositAmount], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [depositAmount], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       ); // balance -> 0
       await time.increase(REFUND_DELAY + 1);
       await expect(settlement.connect(user1).claimRefund(1))
@@ -378,7 +378,7 @@ describe("OpenModelSettlement", function () {
       await settlement.connect(user1).depositFIL({ value: ethers.parseEther("10") });
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("withdraw-test"));
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [ethers.parseEther("10")], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [ethers.parseEther("10")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
 
       const expectedEarnings = ethers.parseEther("10") - (ethers.parseEther("10") * BigInt(FEE_BPS) / 10000n);
@@ -401,7 +401,7 @@ describe("OpenModelSettlement", function () {
 
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("erc20-withdraw"));
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [depositAmt], [tokenAddr], detailsHash
+        [user1.address], [sp1.address], [depositAmt], [tokenAddr], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
 
       const fee = depositAmt * BigInt(FEE_BPS) / 10000n;
@@ -420,7 +420,7 @@ describe("OpenModelSettlement", function () {
       await settlement.connect(user1).depositFIL({ value: ethers.parseEther("10") });
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("platform-withdraw"));
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [ethers.parseEther("10")], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [ethers.parseEther("10")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
 
       const expectedFee = ethers.parseEther("10") * BigInt(FEE_BPS) / 10000n;
@@ -527,7 +527,7 @@ describe("OpenModelSettlement", function () {
       const amount = ethers.parseEther("5");
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("zero-fee"));
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [amount], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [amount], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
 
       expect(await settlement.getSPEarnings(sp1.address, NATIVE)).to.equal(amount);
@@ -544,7 +544,7 @@ describe("OpenModelSettlement", function () {
       const tokens = Array(batchSize).fill(NATIVE);
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("max-batch"));
 
-      await settlement.submitSettlement(users, sps, amounts, tokens, detailsHash);
+      await settlement.submitSettlement(users, sps, amounts, tokens, (users).map(() => 0), (users).map(() => 0), detailsHash);
 
       const record = await settlement.getSettlement(1);
       expect(record.settledCount).to.equal(batchSize);
@@ -558,7 +558,7 @@ describe("OpenModelSettlement", function () {
       const tokens = Array(batchSize).fill(NATIVE);
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("too-big"));
 
-      await expect(settlement.submitSettlement(users, sps, amounts, tokens, detailsHash))
+      await expect(settlement.submitSettlement(users, sps, amounts, tokens, (users).map(() => 0), (users).map(() => 0), detailsHash))
         .to.be.revertedWith("invalid batch size");
     });
 
@@ -576,7 +576,7 @@ describe("OpenModelSettlement", function () {
         [user1.address, user1.address],
         [sp1.address, sp1.address],
         [ethers.parseEther("3"), ethers.parseUnits("50", 6)],
-        [NATIVE, tokenAddr],
+        [NATIVE, tokenAddr], ([user1.address, user1.address]).map(() => 0), ([user1.address, user1.address]).map(() => 0),
         detailsHash
       );
 
@@ -590,7 +590,7 @@ describe("OpenModelSettlement", function () {
       for (let i = 1; i <= 3; i++) {
         const detailsHash = ethers.keccak256(ethers.toUtf8Bytes(`nonce-${i}`));
         await settlement.submitSettlement(
-          [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], detailsHash
+          [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
         );
         expect(await settlement.settlementNonce()).to.equal(i);
       }
@@ -615,7 +615,7 @@ describe("OpenModelSettlement", function () {
       await settlement.connect(user1).depositFIL({ value: ethers.parseEther("100") });
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("reentry-withdraw"));
       await settlement.submitSettlement(
-        [user1.address], [attackerAddr], [ethers.parseEther("10")], [NATIVE], detailsHash
+        [user1.address], [attackerAddr], [ethers.parseEther("10")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
       const earnings = ethers.parseEther("10") - (ethers.parseEther("10") * BigInt(FEE_BPS) / 10000n);
 
@@ -658,7 +658,7 @@ describe("OpenModelSettlement", function () {
       await settlement.connect(user1).depositFIL({ value: ethers.parseEther("100") });
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("reentry-platform"));
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [ethers.parseEther("10")], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [ethers.parseEther("10")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
       const fee = ethers.parseEther("10") * BigInt(FEE_BPS) / 10000n;
       // hand ownership to the attacker so its re-entrant call passes onlyOwner and hits
@@ -686,7 +686,7 @@ describe("OpenModelSettlement", function () {
       await settlement.connect(user1).depositFIL({ value: ethers.parseEther("100") });
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("no-vector"));
       await settlement.submitSettlement(
-        [user1.address], [attackerAddr], [ethers.parseEther("10")], [NATIVE], detailsHash
+        [user1.address], [attackerAddr], [ethers.parseEther("10")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
 
       // attacker received NO native FIL during settlement (receive() never fired)
@@ -715,7 +715,7 @@ describe("OpenModelSettlement", function () {
       await settlement.connect(user1).depositFIL({ value: ethers.parseEther("100") });
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("reject-withdraw"));
       await settlement.submitSettlement(
-        [user1.address], [rejAddr], [ethers.parseEther("10")], [NATIVE], detailsHash
+        [user1.address], [rejAddr], [ethers.parseEther("10")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
       const earnings = ethers.parseEther("10") - (ethers.parseEther("10") * BigInt(FEE_BPS) / 10000n);
 
@@ -753,7 +753,7 @@ describe("OpenModelSettlement", function () {
       await settlement.connect(user1).depositFIL({ value: ethers.parseEther("100") });
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("pw-" + amount));
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [ethers.parseEther(amount)], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [ethers.parseEther(amount)], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
     }
 
@@ -797,7 +797,7 @@ describe("OpenModelSettlement", function () {
       const settleAmt = ethers.parseUnits("100", 6);
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("pw-erc20"));
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [settleAmt], [tokenAddr], detailsHash
+        [user1.address], [sp1.address], [settleAmt], [tokenAddr], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
       const fee = settleAmt * BigInt(FEE_BPS) / 10000n;
 
@@ -939,9 +939,9 @@ describe("OpenModelSettlement", function () {
       const fee = amount * BigInt(FEE_BPS) / 10000n;
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("evt-args"));
       await expect(settlement.submitSettlement(
-        [user1.address], [sp1.address], [amount], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [amount], [NATIVE], [7], [1234], detailsHash
       )).to.emit(settlement, "SettlementExecuted")
-        .withArgs(1, amount, fee, 1, 0, detailsHash);
+        .withArgs(1, amount, fee, 1, 0, detailsHash, 7, 1234);
     });
 
     it("floors the fee and conserves value (no wei lost or created)", async function () {
@@ -950,7 +950,7 @@ describe("OpenModelSettlement", function () {
       const amount = 333n;
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("rounding"));
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [amount], [NATIVE], detailsHash
+        [user1.address], [sp1.address], [amount], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
       const fee = await settlement.platformEarnings(NATIVE);
       const spAmount = await settlement.getSPEarnings(sp1.address, NATIVE);
@@ -963,13 +963,13 @@ describe("OpenModelSettlement", function () {
       // amounts too short
       await expect(settlement.submitSettlement(
         [user1.address, user2.address], [sp1.address, sp2.address],
-        [ethers.parseEther("1")], [NATIVE, NATIVE],
+        [ethers.parseEther("1")], [NATIVE, NATIVE], ([user1.address, user2.address]).map(() => 0), ([user1.address, user2.address]).map(() => 0),
         ethers.keccak256(ethers.toUtf8Bytes("mm-amounts"))
       )).to.be.revertedWith("array length mismatch");
       // tokens too short
       await expect(settlement.submitSettlement(
         [user1.address, user2.address], [sp1.address, sp2.address],
-        [ethers.parseEther("1"), ethers.parseEther("1")], [NATIVE],
+        [ethers.parseEther("1"), ethers.parseEther("1")], [NATIVE], ([user1.address, user2.address]).map(() => 0), ([user1.address, user2.address]).map(() => 0),
         ethers.keccak256(ethers.toUtf8Bytes("mm-tokens"))
       )).to.be.revertedWith("array length mismatch");
     });
@@ -982,7 +982,7 @@ describe("OpenModelSettlement", function () {
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("same-user-twice"));
       const tx = await settlement.submitSettlement(
         [user1.address, user1.address], [sp1.address, sp1.address],
-        [six, six], [NATIVE, NATIVE], detailsHash
+        [six, six], [NATIVE, NATIVE], ([user1.address, user1.address]).map(() => 0), ([user1.address, user1.address]).map(() => 0), detailsHash
       );
       await expect(tx).to.emit(settlement, "SettlementItemFailed")
         .withArgs(1, 1, user1.address, "insufficient balance");
@@ -1015,7 +1015,7 @@ describe("OpenModelSettlement", function () {
       await settlement.connect(user1).depositFIL({ value: ethers.parseEther("10") });
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes("zero-sp"));
       await settlement.submitSettlement(
-        [user1.address], [ethers.ZeroAddress], [ethers.parseEther("3")], [NATIVE], detailsHash
+        [user1.address], [ethers.ZeroAddress], [ethers.parseEther("3")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), detailsHash
       );
       const rec = await settlement.getSettlement(1);
       expect(rec.settledCount).to.equal(0);
@@ -1067,11 +1067,11 @@ describe("OpenModelSettlement", function () {
       const h = ethers.keccak256(ethers.toUtf8Bytes("byOperator"));
       // owner is no longer the operator → cannot settle
       await expect(settlement.submitSettlement(
-        [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], h
+        [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), h
       )).to.be.revertedWith("not operator");
       // the designated operator can
       await expect(settlement.connect(sp2).submitSettlement(
-        [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], h
+        [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), h
       )).to.emit(settlement, "SettlementExecuted");
       // owner still holds admin powers (e.g. fee) despite giving up settling
       await expect(settlement.setPlatformFee(100)).to.emit(settlement, "PlatformFeeUpdated");
@@ -1101,7 +1101,7 @@ describe("OpenModelSettlement", function () {
         .to.be.revertedWith("paused");
       const h = ethers.keccak256(ethers.toUtf8Bytes("whilePaused"));
       await expect(settlement.submitSettlement(
-        [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], h
+        [user1.address], [sp1.address], [ethers.parseEther("1")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), h
       )).to.be.revertedWith("paused");
     });
 
@@ -1110,7 +1110,7 @@ describe("OpenModelSettlement", function () {
       await settlement.connect(user1).depositFIL({ value: ethers.parseEther("10") });
       const h = ethers.keccak256(ethers.toUtf8Bytes("preP"));
       await settlement.submitSettlement(
-        [user1.address], [sp1.address], [ethers.parseEther("4")], [NATIVE], h
+        [user1.address], [sp1.address], [ethers.parseEther("4")], [NATIVE], ([user1.address]).map(() => 0), ([user1.address]).map(() => 0), h
       );
       await settlement.pause();
       // user can still request + claim a refund (after the timelock)

@@ -4,7 +4,7 @@
 const { ethers } = require("hardhat");
 
 async function main() {
-  const C = process.env.CADDR || "0x83c264c95e7Ad4b30Caa5Bc60e75E317bf109E4F";
+  const C = process.env.CADDR || "0x97a3d202CfF60dD369cdf8F7D514dAe36b469852";
   const c = await ethers.getContractAt("OpenModelSettlement", C);
   const FIL = ethers.ZeroAddress;
   const f = (x) => ethers.formatEther(x);

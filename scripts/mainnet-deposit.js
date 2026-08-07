@@ -45,8 +45,23 @@ async function readUserBalance(addr, user, abi) {
 }
 
 async function main() {
-  const rec = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "deployments", "mainnet.json"), "utf8"));
-  const addr = rec.address;
+  // CONTRACT wins over the deployment record. During a contract migration the
+  // record still names the OUTGOING instance for a while, and depositing into a
+  // retired contract strands the funds there (they are recoverable, but only via
+  // the refund timelock). Always pass CONTRACT explicitly around a migration.
+  let addr, src;
+  if (process.env.CONTRACT) {
+    try {
+      addr = ethers.getAddress(process.env.CONTRACT);
+    } catch {
+      throw new Error(`CONTRACT is not a valid address: ${JSON.stringify(process.env.CONTRACT)}`);
+    }
+    src = "CONTRACT env var";
+  } else {
+    const rec = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "deployments", "mainnet.json"), "utf8"));
+    addr = ethers.getAddress(rec.address);
+    src = "deployments/mainnet.json (" + (rec.version || "unversioned") + ")";
+  }
   const amount = process.env.DEPOSIT_FIL || "1";
   const art = require("../artifacts/contracts/OpenModelSettlement.sol/OpenModelSettlement.json");
 
@@ -57,7 +72,11 @@ async function main() {
   if (net.chainId !== 314n) throw new Error(`refusing to run: chainId ${net.chainId} is not Filecoin mainnet (314)`);
 
   const walletBal = await withRetry(() => provider.getBalance(signer.address), "wallet-bal");
-  console.log("contract:", addr);
+  console.log("contract:", addr, "[from " + src + "]");
+  // Depositing into a contract with no code would burn the funds outright.
+  if ((await withRetry(() => provider.getCode(addr), "code")) === "0x") {
+    throw new Error(`no contract code at ${addr} — wrong address`);
+  }
   console.log("depositing wallet:", signer.address, "| on-chain balance:", ethers.formatEther(walletBal), "FIL");
   const before = await readUserBalance(addr, signer.address, art.abi);
   console.log("in-contract balance before:", ethers.formatEther(before), "FIL");

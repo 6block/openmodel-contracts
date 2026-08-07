@@ -29,7 +29,7 @@ links offline (only the last step reads the chain):
 
 ```bash
 python3 verify-receipt.py http://<gateway>:3001 <request_id> \
-    https://api.node.glif.io/rpc/v1 0x465d979675d401295C529e15dC9187c9b92ed4d1
+    https://api.node.glif.io/rpc/v1 0x60D41baEaBe1ABE061AE82c44425debc35bA524A
 # 1) worker receipt signature ........ OK (ed25519)
 # 2) leaf == sha256(record) .......... OK
 # 3) merkle inclusion proof .......... OK
@@ -50,10 +50,10 @@ Exact byte-level formats: [docs/verification.md](docs/verification.md).
 |---|---|
 | User funds | `depositFIL()` payable, `depositToken(token, amount)`, `receive()` (bare FIL transfer = deposit) |
 | Refunds (time-locked) | `requestRefund(token, amount)` → wait `refundDelaySec` → `claimRefund(id)`; `cancelRefund(id)` anytime |
-| Settlement (operator only) | `submitSettlement(users[], sps[], amounts[], tokens[], detailsHash)` — batch ≤ 100 items, deduplicated by `detailsHash`, per-item skip (not revert) on insufficient balance |
+| Settlement (operator only) | `submitSettlement(users[], sps[], amounts[], tokens[], requestCounts[], tokenCounts[], detailsHash)` — batch ≤ 100 items, deduplicated by `detailsHash`, per-item skip (not revert) on insufficient balance |
 | SP / platform payout | `withdrawEarnings(token)` (SP), `withdrawPlatformEarnings(token, to)` (owner) |
 | Governance (owner only) | `setOperator`, `setPlatformFee` (≤ 30%), `setRefundDelay`, `add/removeSupportedToken`, `pause`/`unpause`, two-step `transferOwnership`/`acceptOwnership` |
-| Views | `getUserBalance`, `getSPEarnings`, `getSettlement(batchId)`, `getRefundRequest(id)`, `processedBatches(detailsHash)` |
+| Views | `getUserBalance`, `getSPEarnings`, `getSettlement(batchId)`, `getRefundRequest(id)`, `processedBatches(detailsHash)`, `cumulativeRequests()`, `cumulativeTokens()`, `SCHEMA_VERSION()` |
 
 Key properties (full rationale in [docs/contract-design.md](docs/contract-design.md)):
 
@@ -66,6 +66,15 @@ Key properties (full rationale in [docs/contract-design.md](docs/contract-design
   and emit `SettlementItemFailed` instead of reverting the batch.
 - **Refund delay >> settlement interval** — a user cannot front-run the debit of
   usage they already consumed.
+- **Inference volume is on-chain.** Every settled batch records how many
+  inference requests it covers and how many tokens they consumed
+  (`getSettlement(batchId).requestCount` / `.tokenCount`), and two counters
+  (`cumulativeRequests`, `cumulativeTokens`) answer "how much inference has this
+  network served" in one `eth_call`. The counts are operator-asserted like the
+  amounts, but independently checkable: `detailsHash` commits to one Merkle leaf
+  per request carrying its token counts, so anyone holding the published leaf set
+  can recompute both numbers. Failed items are excluded — their requests are
+  carried as debt and counted when they settle, so nothing is counted twice.
 - **Non-upgradeable.** The deployed code is the deal. Emergency path: `pause` →
   users reclaim funds → deploy a successor → gateway repoints.
 
@@ -73,8 +82,8 @@ Key properties (full rationale in [docs/contract-design.md](docs/contract-design
 
 | Network | Address | Params |
 |---|---|---|
-| Filecoin Calibration (314159) | `0x83c264c95e7Ad4b30Caa5Bc60e75E317bf109E4F` | fee 5%, refund delay 3600 s — see [deployments/calibration.json](deployments/calibration.json) |
-| Filecoin Mainnet (314) | `0x465d979675d401295C529e15dC9187c9b92ed4d1` | trial: fee 0%, refund delay 3600 s, earnings freeze 86400 s — see [deployments/mainnet.json](deployments/mainnet.json) |
+| Filecoin Calibration (314159) | `0x97a3d202CfF60dD369cdf8F7D514dAe36b469852` | fee 5%, refund delay 3600 s, earnings freeze 604800 s — see [deployments/calibration-v13.json](deployments/calibration-v13.json) |
+| Filecoin Mainnet (314) | `0x60D41baEaBe1ABE061AE82c44425debc35bA524A` | trial: fee 0%, refund delay 3600 s, earnings freeze 86400 s — see [deployments/mainnet.json](deployments/mainnet.json) |
 
 `deployments/<network>.json` is the authoritative record binding a chain address
 to the source at a given tag (deploy tx, block, constructor params, roles).
@@ -119,6 +128,15 @@ versions.
 
 ## Versioning
 
-`v1.0.0` — the source deployed at both addresses above (Calibration and mainnet). Because the
-contract is non-upgradeable, a tag here maps 1:1 to a chain address; any change
-ships as a new major tag + new deployment + gateway release.
+`v1.3.0` — the source deployed at both addresses above (Calibration and mainnet).
+Because the contract is non-upgradeable, a tag here maps 1:1 to a chain address;
+any change ships as a new major tag + new deployment + gateway release.
+
+`SCHEMA_VERSION()` returns the ABI generation a deployment speaks — `3` for this
+release. Earlier deployments have no such getter (the call reverts there), which
+is how a client checks it is talking to a stats-capable contract before using the
+7-argument `submitSettlement` or reading `requestCount`/`tokenCount`. A gateway
+must be configured for the generation it targets (`settlement.contract_schema`).
+
+Balances do not carry across deployments: the contract is the ledger, so users of
+a retired instance reclaim through its refund path and deposit into the new one.

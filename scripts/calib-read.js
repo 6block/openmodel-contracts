@@ -1,6 +1,6 @@
 const { ethers } = require("hardhat");
 async function main(){
-  const C="0x83c264c95e7Ad4b30Caa5Bc60e75E317bf109E4F";
+  const C="0x97a3d202CfF60dD369cdf8F7D514dAe36b469852";
   const c = await ethers.getContractAt("OpenModelSettlement", C);
   const z = ethers.ZeroAddress;
   const op="0x01ac683ab8A0DB80F1f05F79946cc4F65B490a08", user="0x9875c8D91fE91199D7B9207d78f5A592EFCc6f88";
