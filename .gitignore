@@ -8,3 +8,7 @@ coverage.json
 .env
 *.key
 .DS_Store
+
+# Python bytecode from verify-receipt.py
+__pycache__/
+*.pyc

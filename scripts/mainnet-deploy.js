@@ -207,6 +207,8 @@ async function main() {
     supersedes: "0x465d979675d401295C529e15dC9187c9b92ed4d1",
     note: "v1.3 adds per-batch requestCount/tokenCount + cumulative counters; gateway must run contract_schema: 3",
   };
+  // Staging record only — mainnet-finish.js is what (re)writes the canonical
+  // deployments/mainnet.json after roles are set and verified.
   const out = path.join(__dirname, "..", "deployments", "mainnet-v13.json");
   fs.writeFileSync(out, JSON.stringify(record, null, 2) + "\n");
   console.log("\nwrote", out);

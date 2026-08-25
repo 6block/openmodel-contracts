@@ -10,7 +10,7 @@ scripts, and the offline billing verifier.** It is the complete trust surface a
 user, SP, or auditor needs to read — no gateway internals required.
 
 - Gateway (submits settlements): [openmodel-gateway](https://github.com/6block/openmodel-gateway) v2.x
-- SP worker stack (signs receipts): [openmodel](https://github.com/6block/openmodel) v1.2+
+- SP worker stack (signs receipts): [openmodel](https://github.com/6block/openmodel) v1.3+ (receipts since v1.2)
 
 ## Why you can verify your bill without trusting anyone
 
@@ -28,8 +28,11 @@ Given a `request_id`, [`verify-receipt.py`](verify-receipt.py) checks all five
 links offline (only the last step reads the chain):
 
 ```bash
+# RPC note: prefer ankr for reads — glif intermittently returns empty
+# eth_call bodies that parse as zeros. Requires: pip install cryptography
+# hosted alpha base: https://openmodel.filfox.info
 python3 verify-receipt.py http://<gateway>:3001 <request_id> \
-    https://api.node.glif.io/rpc/v1 0x60D41baEaBe1ABE061AE82c44425debc35bA524A
+    https://rpc.ankr.com/filecoin 0x60D41baEaBe1ABE061AE82c44425debc35bA524A
 # 1) worker receipt signature ........ OK (ed25519)
 # 2) leaf == sha256(record) .......... OK
 # 3) merkle inclusion proof .......... OK
@@ -51,9 +54,10 @@ Exact byte-level formats: [docs/verification.md](docs/verification.md).
 | User funds | `depositFIL()` payable, `depositToken(token, amount)`, `receive()` (bare FIL transfer = deposit) |
 | Refunds (time-locked) | `requestRefund(token, amount)` → wait `refundDelaySec` → `claimRefund(id)`; `cancelRefund(id)` anytime |
 | Settlement (operator only) | `submitSettlement(users[], sps[], amounts[], tokens[], requestCounts[], tokenCounts[], detailsHash)` — batch ≤ 100 items, deduplicated by `detailsHash`, per-item skip (not revert) on insufficient balance |
-| SP / platform payout | `withdrawEarnings(token)` (SP), `withdrawPlatformEarnings(token, to)` (owner) |
-| Governance (owner only) | `setOperator`, `setPlatformFee` (≤ 30%), `setRefundDelay`, `add/removeSupportedToken`, `pause`/`unpause`, two-step `transferOwnership`/`acceptOwnership` |
-| Views | `getUserBalance`, `getSPEarnings`, `getSettlement(batchId)`, `getRefundRequest(id)`, `processedBatches(detailsHash)`, `cumulativeRequests()`, `cumulativeTokens()`, `SCHEMA_VERSION()` |
+| SP / platform payout | `withdrawEarnings(token)` (SP; matures due lockups first), `withdrawPlatformEarnings(token, to)` (owner), `matureEarnings(sp, token, maxEntries)` (anyone) |
+| Earnings freeze & disputes | settled SP earnings sit frozen for `earningsFreezeSec` (dispute window); `confiscateFrozenEarnings(sp, token, evidenceHash)` — **arbiter only, still-frozen amounts only**, every seizure commits an evidence hash on-chain |
+| Governance (owner only) | `setOperator`, `setArbiter`, `setPlatformFee` (≤ 30%), `setRefundDelay`, `setEarningsFreeze` (≤ 90 d), `add/removeSupportedToken`, `pause`/`unpause`, two-step `transferOwnership`/`acceptOwnership` |
+| Views | `getUserBalance`, `getSPEarnings`, `getWithdrawableEarnings(sp, token)`, `getFrozenEarnings(sp, token)`, `getTotalEarnings(sp, token)`, `getLockupCount`/`getLockup`, `getSettlement(batchId)`, `getRefundRequest(id)`, `processedBatches(detailsHash)`, `cumulativeRequests()`, `cumulativeTokens()`, `SCHEMA_VERSION()` |
 
 Key properties (full rationale in [docs/contract-design.md](docs/contract-design.md)):
 
@@ -92,11 +96,11 @@ to the source at a given tag (deploy tx, block, constructor params, roles).
 
 ```bash
 npm install
-npx hardhat test                          # 84 tests: funds, settlement, refunds,
-                                          # roles, pause, reentrancy, edge cases
+npx hardhat test                          # 115 tests: funds, settlement, refunds, roles,
+                                          # pause, reentrancy, batch stats, earnings freeze
 
 # deploy (example: Calibration)
-export RPC_URL=https://api.calibration.node.glif.io/rpc/v1
+export FEVM_RPC_URL=https://api.calibration.node.glif.io/rpc/v1   # hardhat.config.js reads FEVM_RPC_URL (calibration) / MAINNET_RPC_URL (mainnet)
 export DEPLOYER_PRIVATE_KEY=...           # never commit; see .gitignore
 npx hardhat run scripts/calib-deploy-settlement.js --network calibration
 # then: record the new address in deployments/, verify source on the explorer,
@@ -125,6 +129,13 @@ does not fundamentally widen the security gap. Both approaches add usage
 friction and system complexity, so the current version keeps the present
 design; we may continue to weigh a more decentralized scheme in future
 versions.
+
+What bounds the trust today: (a) worker-signed receipts + the on-chain Merkle
+commitment make fabricated usage detectable (see verification.md); (b) SP
+earnings stay **frozen for `earningsFreezeSec`** after settlement, and within
+that window an **arbiter** role can seize provably-fraudulent earnings —
+each seizure must commit an `evidenceHash` on-chain, so it is publicly
+attributable. Matured earnings can never be seized.
 
 ## Versioning
 

@@ -1,0 +1,19 @@
+{
+  "network": "calibration",
+  "chainId": 314159,
+  "contract": "OpenModelSettlement",
+  "address": "0x83c264c95e7Ad4b30Caa5Bc60e75E317bf109E4F",
+  "deployer": "0x01ac683ab8A0DB80F1f05F79946cc4F65B490a08",
+  "owner": "0x01ac683ab8A0DB80F1f05F79946cc4F65B490a08",
+  "operator": "0x01ac683ab8A0DB80F1f05F79946cc4F65B490a08",
+  "platformFeeBps": 500,
+  "refundDelaySec": 3600,
+  "deployTx": "0x8f5bcb5c9d3ff1c4c381941f4d184f59809ff49cb766cacaa5c6c1e56c5e6893",
+  "blockNumber": 3854292,
+  "deployedAt": "2026-07-02T01:19:35.908Z",
+  "supersedes": "0xf1cDF4320952A60edeF3e70b5D1C136334cDE261",
+  "features": [
+    "operator/owner separation",
+    "emergency pause"
+  ]
+}

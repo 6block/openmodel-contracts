@@ -135,7 +135,7 @@ async function main() {
   };
   fs.writeFileSync(RECORD, JSON.stringify(record, null, 2) + "\n");
   console.log("\nrecorded to deployments/mainnet.json");
-  console.log("next: fill config/sp-state-agent-mainnet.yaml contract_address with", addr);
+  console.log("next: in the openmodel-gateway repo, set settlement.contract_address in config/sp-state-agent-mainnet.yaml to", addr);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

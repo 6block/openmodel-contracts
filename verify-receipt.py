@@ -9,14 +9,15 @@ charge settled on-chain matches what the worker attested:
 e.g. python3 verify-receipt.py http://127.0.0.1:3001 req-abc123 \\
          https://api.calibration.node.glif.io/rpc/v1 0x97a3d202CfF60dD369cdf8F7D514dAe36b469852
 
-If the endpoint serves HTTPS with a private CA (the hosted trial does), pass
---ca <file> with the CA certificate distributed alongside the endpoint, or
---insecure to skip TLS verification for this fetch (the proof itself stays
-tamper-evident either way: checks 1-5 are cryptographic, not transport trust).
+Pass --ca <file> (the CA certificate distributed alongside the endpoint) or
+--insecure (skip TLS verification for this fetch) only when the endpoint's
+certificate is outside the system trust store — e.g. a self-hosted gateway on
+a private CA. The proof itself stays tamper-evident either way: checks 1-5
+are cryptographic, not transport trust.
 These flags affect only the receipt-proof fetch — the rpc_url connection always
 uses normal system trust.
 
-Checks (see docs/design-improvements.md A1 for the canonical formats):
+Checks (canonical byte-level formats: docs/verification.md in this repo):
   1. worker receipt: ed25519 signature over the canonical receipt payload
   2. leaf == sha256(canonical leaf JSON built from the ledger record + receipt sig)
   3. Merkle inclusion proof folds up to merkle_root
@@ -117,7 +118,10 @@ def verify(base: str, rid: str, rpc: str | None, contract: str | None,
                 bytes.fromhex(rcpt["sig"]), payload)
             print("1) worker receipt signature ........ OK (ed25519)")
         except ImportError:
-            print("1) worker receipt signature ........ SKIPPED (pip install cryptography)")
+            # The signature is the root of the whole trust chain: a verifier
+            # that skips it must not print VERIFIED. Fail loudly instead.
+            print("1) worker receipt signature ........ FAIL: the `cryptography` package is not installed (pip install cryptography)")
+            ok = False
         except Exception as e:
             print(f"1) worker receipt signature ........ FAIL: {e}")
             ok = False

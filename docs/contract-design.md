@@ -28,7 +28,8 @@ off-chain against a cached view; the chain is the settlement and audit layer.
 | **user** | user's wallet | deposit, request/claim/cancel refund |
 | **SP** | SP's wallet | `withdrawEarnings` of accrued earnings |
 | **operator** | HOT key on the gateway server | `submitSettlement` only |
-| **owner** | can be COLD storage | fee (≤ 30% cap), refund delay, token whitelist, `setOperator`, `pause`/`unpause`, platform-earnings withdrawal, two-step ownership transfer |
+| **arbiter** | separate key, may be cold | `confiscateFrozenEarnings` — may seize an SP's **still-frozen** earnings only, and must commit an `evidenceHash` on-chain with every seizure |
+| **owner** | can be COLD storage | fee (≤ 30% cap), refund delay, earnings freeze window, token whitelist, `setOperator`, `setArbiter`, `pause`/`unpause`, platform-earnings withdrawal, two-step ownership transfer |
 
 Mitigations for the operator-accounting trust were considered and deliberately
 deferred: (a) signing every inference request to authorize settling exactly that
@@ -50,16 +51,25 @@ Ownership transfer is **two-step** (`transferOwnership` proposes,
 
 ```solidity
 balances[user][token]          // prepaid deposits, debited by settlement
-spEarnings[sp][token]          // accrued SP payout, pull-withdrawn
+spEarnings[sp][token]          // matured SP payout, pull-withdrawn
+spLockups[sp][token][]         // frozen earnings buckets (amount, unlockAt);
+spLockupCursor[sp][token]      //   matured lazily past this cursor
 platformEarnings[token]        // accrued fee, owner-withdrawn
 supportedTokens[token]         // whitelist; NATIVE (0x0) always supported
 refundRequests[id]             // (user, token, amount, unlockTime, state)
+lockedForRefund[user][token]   // refund-marked slice of the balance
 processedBatches[detailsHash]  // replay/dedup guard, permanent
 settlements[batchId]           // SettlementRecord: detailsHash, totalAmount,
-                               //   settledCount, failedCount, timestamp
+                               //   settledCount, failedCount, timestamp,
+                               //   requestCount, tokenCount (v1.3)
 settlementNonce                // next batchId
+cumulativeRequests             // network-lifetime request counter (v1.3)
+cumulativeTokens               // network-lifetime token counter (v1.3)
 platformFeeBps                 // ≤ MAX_FEE_BPS (3000 = 30%)
-refundDelaySec                 // refund time-lock
+refundDelaySec                 // refund time-lock (≤ MAX_REFUND_DELAY, 30d)
+earningsFreezeSec              // SP earnings freeze window (≤ 90d)
+arbiter                        // seizure role; address(0) = disabled
+SCHEMA_VERSION = 3             // constant; gateways pin their ABI against it
 paused                         // emergency switch (owner)
 ```
 
@@ -75,12 +85,21 @@ do **not** execute EVM code; only EVM-level transfers (eth_sendTransaction /
 from an EVM wallet.
 
 ### Settlement (the core flow)
-`submitSettlement(users[], sps[], amounts[], tokens[], detailsHash)` —
-`onlyOperator whenNotPaused nonReentrant`, arrays ≤ `MAX_BATCH_SIZE` (100).
+`submitSettlement(users[], sps[], amounts[], tokens[], requestCounts[],
+tokenCounts[], detailsHash)` — `onlyOperator whenNotPaused nonReentrant`,
+arrays ≤ `MAX_BATCH_SIZE` (100). The two v1.3 stats arrays record per-item
+request/token volume; their sums also advance the public `cumulativeRequests`
+/ `cumulativeTokens` counters that power the network-stats endpoint.
 
 Per item: debit `balances[user][token]`; split `amount` into
 `fee = amount × platformFeeBps / 10000` → `platformEarnings`, remainder →
-`spEarnings[sp][token]`.
+the SP's earnings. With `earningsFreezeSec > 0` the SP share lands in a
+**frozen lockup bucket** first (`spLockups`), maturing into withdrawable
+`spEarnings` after the freeze window — `withdrawEarnings` matures lazily, and
+`matureEarnings(sp, token, maxEntries)` lets anyone advance the cursor in
+bounded steps. The freeze doubles as the dispute window: the arbiter can seize
+**only still-frozen** amounts (`confiscateFrozenEarnings`, evidenceHash
+committed on-chain); matured earnings can never be taken.
 
 Two properties matter for correctness under real-world failure:
 
@@ -110,19 +129,22 @@ Pull-based: `withdrawEarnings` (SP), `withdrawPlatformEarnings` (owner).
 
 ## 5. Pause semantics
 
-`pause()` freezes deposits (incl. `receive()`), settlements, and refund
-*requests* — an emergency brake for a compromised operator key or a discovered
-defect. Already-earned SP withdrawals and already-unlocked refund claims are
-the escape hatches that keep user/SP funds reachable during an incident.
+`pause()` freezes deposits (incl. `receive()`) and settlements — an emergency
+brake for a compromised operator key or a discovered defect. The **entire
+refund path stays open** (request, claim, cancel carry no `whenNotPaused`), as
+do SP withdrawals: a pause blocks new money coming in and new charges landing,
+never a user's or SP's exit.
 
 ## 6. Events
 
-`Deposited`, `SettlementExecuted(batchId, detailsHash, totalAmount,
-settledCount, failedCount)`, `SettlementItemFailed(batchId, index, user, sp,
-amount, token)`, `RefundRequested/RefundClaimed/RefundCancelled`,
-`EarningsWithdrawn`, `PlatformFeeChanged`, `RefundDelayChanged`,
-`TokenAdded/TokenRemoved`, `OperatorChanged`, `OwnerTransferProposed/
-OwnershipTransferred`, `Paused/Unpaused`. Settlement events are load-bearing:
+`Deposited(user, token, amount)`, `SettlementExecuted(batchId, totalAmount,
+platformFee, settledCount, failedCount, detailsHash, requestCount,
+tokenCount)`, `SettlementItemFailed(batchId, index, user, reason)`,
+`RefundRequested/RefundClaimed/RefundCancelled`, `SPWithdrawn(sp, token,
+amount)`, `PlatformWithdrawn`, `PlatformFeeUpdated`, `RefundDelayUpdated`,
+`TokenAdded/TokenRemoved`, `OperatorUpdated`, `ArbiterUpdated`,
+`EarningsFreezeUpdated`, `EarningsConfiscated(sp, token, amount,
+evidenceHash)`, `OwnerTransferProposed/OwnerTransferred`, `Paused/Unpaused`. Settlement events are load-bearing:
 the gateway's per-item failure handling and its local audit log are built on
 them, and `getSettlement(batchId)` + `processedBatches` are what third-party
 verification checks against.
