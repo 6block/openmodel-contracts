@@ -1,0 +1,23 @@
+{
+  "network": "mainnet",
+  "chainId": 314,
+  "contract": "OpenModelSettlement",
+  "version": "v1.3-batch-stats",
+  "address": "0x60D41baEaBe1ABE061AE82c44425debc35bA524A",
+  "deployer": "0x3934Ab3DCb874e5dd33768C66f94aa0EcA83DF3b",
+  "owner": "0x3934Ab3DCb874e5dd33768C66f94aa0EcA83DF3b",
+  "operator": "0x364960D9744364231c0c6577c7D75fB83C052735",
+  "arbiter": "0x3934Ab3DCb874e5dd33768C66f94aa0EcA83DF3b",
+  "platformFeeBps": 0,
+  "refundDelaySec": 3600,
+  "earningsFreezeSec": 86400,
+  "stablecoins": [
+    "0x80B98d3aa09ffff255c3ba4A241111Ff1262F045"
+  ],
+  "contractSchema": 3,
+  "deployTx": "0x7ad4b2067ea6bd47576dc42517c67c4c67a1956bbe7cd880e95c276e2b84ca10",
+  "blockNumber": 6256896,
+  "deployedAt": "2026-08-06T10:51:46.312Z",
+  "supersedes": "0x465d979675d401295C529e15dC9187c9b92ed4d1",
+  "note": "retired 2026-11-24, superseded by v1.4 0x29b994f63D91e447945a1cDeA2776167B7415c26. Balances still held here are reclaimed through this contract's own refund path (requestRefund, then claimRefund after refundDelaySec)."
+}

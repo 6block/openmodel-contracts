@@ -26,7 +26,7 @@ describe("EarningsFreeze", function () {
       [user.address],
       [sp.address],
       [ethers.parseEther(amountEth)],
-      [NATIVE], ([user.address]).map(() => 0), ([user.address]).map(() => 0),
+      [NATIVE], ([user.address]).map(() => 0), ([user.address]).map(() => [0,0,0,0]), 
       detailsHash
     );
   }
@@ -161,7 +161,7 @@ describe("EarningsFreeze", function () {
         [user1.address, user1.address],
         [sp1.address, sp1.address],
         [ethers.parseEther("10"), ethers.parseEther("20")],
-        [NATIVE, NATIVE], ([user1.address, user1.address]).map(() => 0), ([user1.address, user1.address]).map(() => 0),
+        [NATIVE, NATIVE], ([user1.address, user1.address]).map(() => 0), ([user1.address, user1.address]).map(() => [0,0,0,0]), 
         detailsHash
       );
       const [totalEntries] = await settlement.getLockupCount(sp1.address, NATIVE);
@@ -232,7 +232,7 @@ describe("EarningsFreeze", function () {
 
     async function settleToken(user, sp, amount) {
       const detailsHash = ethers.keccak256(ethers.toUtf8Bytes(`erc20-freeze-${++batchSeq}`));
-      await settlement.submitSettlement([user.address], [sp.address], [amount], [tokenAddr], ([user.address]).map(() => 0), ([user.address]).map(() => 0), detailsHash);
+      await settlement.submitSettlement([user.address], [sp.address], [amount], [tokenAddr], ([user.address]).map(() => 0), ([user.address]).map(() => [0,0,0,0]),  detailsHash);
     }
 
     it("freezes an ERC20 credit and pays the token out after the window", async function () {

@@ -13,9 +13,24 @@ contract OpenModelSettlement is ReentrancyGuard {
     uint256 public constant MAX_BATCH_SIZE = 100;
     // ABI schema marker for off-chain clients. v1.2 and earlier deployments have no
     // such getter (the call reverts there), which is exactly how a client verifies it
-    // is talking to a stats-capable contract before using the 7-argument
+    // is talking to a stats-capable contract before using the stats-bearing
     // submitSettlement or the extended SettlementRecord layout.
-    uint256 public constant SCHEMA_VERSION = 3;
+    //
+    // 2 = v1.2 (5-arg submit, no stats). 3 = v1.3 (7-arg submit, one token column).
+    // 4 = v1.4 (8-arg submit, per-unit volume). Bumped because the SHAPE of the stats
+    // changed, not just their values: a client that reads a v1.4 record with the v1.3
+    // tuple layout would decode garbage.
+    uint256 public constant SCHEMA_VERSION = 4;
+    // Volume units the stats tally. The indices are the ABI: they are what an off-chain
+    // client uses to read volumeByUnit, and what the per-item unit tags must equal.
+    // Fixing the set here (rather than letting the operator pass arbitrary labels) keeps
+    // the public counters one eth_call away and bounded, and leaves room for the speech
+    // milestone without another contract deployment.
+    uint256 public constant UNIT_TOKEN = 0; // LLM text / image-understanding prompt+output tokens
+    uint256 public constant UNIT_IMAGE = 1; // generated images
+    uint256 public constant UNIT_AUDIO_SECOND = 2; // seconds of transcribed input audio
+    uint256 public constant UNIT_CHARACTER = 3; // characters of text-to-speech input
+    uint256 public constant UNIT_COUNT = 4;
     uint256 public constant MAX_REFUND_DELAY = 30 days; // bound on setRefundDelay
     uint256 public constant MAX_EARNINGS_FREEZE = 90 days; // bound on setEarningsFreeze
     address public constant NATIVE_TOKEN = address(0); // FIL
@@ -82,7 +97,19 @@ contract OpenModelSettlement is ReentrancyGuard {
     // One eth_call answers "how much inference has this network performed": these are
     // the headline public stats, so they live in dedicated slots rather than being
     // summed over settlement records.
+    //
+    // Volume is tallied PER UNIT. A single scalar could not describe a network that
+    // serves tokens and images: summing images into a token counter would report a
+    // meaningless number (and is the on-chain half of the same mistake the off-chain
+    // biller refuses to make). Indexed by the UNIT_* constants above.
     uint256 public cumulativeRequests;
+    uint256[UNIT_COUNT] public cumulativeVolume;
+
+    // Deprecated scalar, retained ONLY so a v1.2/v1.3-era reader that calls
+    // cumulativeTokens() still gets an answer instead of a revert. It is written in
+    // lockstep with cumulativeVolume[UNIT_TOKEN] and is never authoritative: new code
+    // reads cumulativeVolume. Documented as deprecated rather than removed, because a
+    // public stats endpoint may be live before this deployment.
     uint256 public cumulativeTokens;
 
     // Refund timelock
@@ -103,13 +130,14 @@ contract OpenModelSettlement is ReentrancyGuard {
         uint256 settledCount;
         uint256 failedCount;
         bytes32 detailsHash;
-        // v1.3 batch stats: inference requests and tokens (prompt + completion)
-        // covered by the SETTLED items of this batch. Operator-asserted like amounts,
-        // but independently checkable: detailsHash commits to one Merkle leaf per
-        // request carrying its token counts, so anyone holding the published leaf set
-        // can recompute both numbers.
+        // v1.3 batch stats: inference requests and volume covered by the SETTLED items
+        // of this batch. Operator-asserted like amounts, but independently checkable:
+        // detailsHash commits to one Merkle leaf per request carrying its unit and
+        // quantity, so anyone holding the published leaf set can recompute these.
         uint256 requestCount;
-        uint256 tokenCount;
+        // v1.4: volume per unit, indexed by UNIT_*. Replaces the v1.3 scalar tokenCount,
+        // which could only describe a token-only network.
+        uint256[UNIT_COUNT] volumeByUnit;
     }
 
     struct RefundRequest {
@@ -131,7 +159,10 @@ contract OpenModelSettlement is ReentrancyGuard {
     event RefundRequested(uint256 indexed requestId, address indexed user, address indexed token, uint256 amount, uint256 claimableAt);
     event RefundClaimed(uint256 indexed requestId, address indexed user, address indexed token, uint256 amount);
     event RefundCancelled(uint256 indexed requestId, address indexed user);
-    event SettlementExecuted(uint256 indexed batchId, uint256 totalAmount, uint256 platformFee, uint256 settledCount, uint256 failedCount, bytes32 detailsHash, uint256 requestCount, uint256 tokenCount);
+    // v1.4: the trailing scalar tokenCount of the v1.3 event is replaced by the
+    // per-unit volume array. Off-chain indexers that read the old positional argument
+    // must be updated with the ABI — which is what the schema bump signals.
+    event SettlementExecuted(uint256 indexed batchId, uint256 totalAmount, uint256 platformFee, uint256 settledCount, uint256 failedCount, bytes32 detailsHash, uint256 requestCount, uint256[UNIT_COUNT] volumeByUnit);
     event SettlementItemFailed(uint256 indexed batchId, uint256 index, address user, string reason);
     event SPWithdrawn(address indexed sp, address indexed token, uint256 amount);
     event PlatformWithdrawn(address indexed to, address indexed token, uint256 amount);
@@ -260,29 +291,40 @@ contract OpenModelSettlement is ReentrancyGuard {
 
     // ==================== Operator Functions ====================
 
-    // requestCounts/tokenCounts are the per-item inference stats (request count and
-    // prompt+completion token sum of the requests aggregated into that item). The
-    // batch record and the cumulative counters accumulate them for SETTLED items
-    // only: a failed item's requests are carried as debt off-chain and re-submitted
-    // in a later batch, so counting at submission time would double-count them.
-    // detailsHash deliberately does NOT cover these two arrays — it must stay a pure
-    // content hash of the economic batch (dedup + crash-replay invariant). They are
-    // operator-asserted, verifiable off-chain against the Merkle leaf set committed
-    // by detailsHash, and can never move funds.
+    // Per-item inference stats. `itemVolume[i][u]` is how much of unit u that item's
+    // requests produced, indexed by the UNIT_* constants. The batch record and the
+    // cumulative counters accumulate them for SETTLED items only: a failed item's
+    // requests are carried as debt off-chain and re-submitted in a later batch, so
+    // counting at submission time would double-count them.
+    //
+    // WHY PER-ITEM rather than one batch total: a batch is grouped by (user, SP), and a
+    // user can serve text and image requests against the same SP in one settlement
+    // window. A single batch total could not be trimmed when ONE item is skipped for
+    // insufficient balance, so a re-submitted debt would be counted twice. Attributing
+    // the volume to the item keeps "settled items only" exact.
+    //
+    // WHY UNITS ARE EXPLICIT rather than inferred from the model: the contract does not
+    // know the catalog, and an explicit per-unit column keeps the batch self-describing
+    // — an auditor reading only the chain can tell 4 images from 4 tokens. The figures
+    // are operator-asserted (like amounts); they are checked against the Merkle leaves
+    // off-chain, and they can never move funds.
+    //
+    // detailsHash deliberately does NOT cover these arrays — it must stay a pure content
+    // hash of the economic batch (dedup + crash-replay invariant).
     function submitSettlement(
         address[] calldata users,
         address[] calldata sps,
         uint256[] calldata amounts,
         address[] calldata tokens,
         uint256[] calldata requestCounts,
-        uint256[] calldata tokenCounts,
+        uint256[UNIT_COUNT][] calldata itemVolume,
         bytes32 detailsHash
     ) external onlyOperator whenNotPaused nonReentrant {
         uint256 len = users.length;
         require(len > 0 && len <= MAX_BATCH_SIZE, "invalid batch size");
         require(
             len == sps.length && len == amounts.length && len == tokens.length &&
-            len == requestCounts.length && len == tokenCounts.length,
+            len == requestCounts.length && len == itemVolume.length,
             "array length mismatch"
         );
         require(!processedBatches[detailsHash], "batch already processed");
@@ -295,7 +337,7 @@ contract OpenModelSettlement is ReentrancyGuard {
         uint256 settledCount;
         uint256 failedCount;
         uint256 requestCount;
-        uint256 tokenCount;
+        uint256[UNIT_COUNT] memory volume;
 
         for (uint256 i = 0; i < len; i++) {
             // Refuse a zero SP address: crediting earnings to address(0) is an
@@ -322,11 +364,18 @@ contract OpenModelSettlement is ReentrancyGuard {
             totalFee += fee;
             settledCount++;
             requestCount += requestCounts[i];
-            tokenCount += tokenCounts[i];
+            for (uint256 u = 0; u < UNIT_COUNT; u++) {
+                volume[u] += itemVolume[i][u];
+            }
         }
 
         cumulativeRequests += requestCount;
-        cumulativeTokens += tokenCount;
+        for (uint256 u = 0; u < UNIT_COUNT; u++) {
+            cumulativeVolume[u] += volume[u];
+        }
+        // Deprecated mirror (see the state declaration): token volume stays readable at
+        // the old name for any reader that has not moved to cumulativeVolume yet.
+        cumulativeTokens += volume[UNIT_TOKEN];
 
         settlements[batchId] = SettlementRecord({
             batchId: batchId,
@@ -336,10 +385,10 @@ contract OpenModelSettlement is ReentrancyGuard {
             failedCount: failedCount,
             detailsHash: detailsHash,
             requestCount: requestCount,
-            tokenCount: tokenCount
+            volumeByUnit: volume
         });
 
-        emit SettlementExecuted(batchId, totalAmount, totalFee, settledCount, failedCount, detailsHash, requestCount, tokenCount);
+        emit SettlementExecuted(batchId, totalAmount, totalFee, settledCount, failedCount, detailsHash, requestCount, volume);
     }
 
     // ==================== SP Functions ====================

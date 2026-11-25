@@ -7,7 +7,7 @@ charge settled on-chain matches what the worker attested:
     python3 verify-receipt.py [--ca ca.pem | --insecure] <public_query_base> <request_id> [rpc_url] [contract]
 
 e.g. python3 verify-receipt.py http://127.0.0.1:3001 req-abc123 \\
-         https://api.calibration.node.glif.io/rpc/v1 0x97a3d202CfF60dD369cdf8F7D514dAe36b469852
+         https://api.calibration.node.glif.io/rpc/v1 0x8Fd8478dfdb3B86F8536AAEd2448A94cb04fC992
 
 Pass --ca <file> (the CA certificate distributed alongside the endpoint) or
 --insecure (skip TLS verification for this fetch) only when the endpoint's
@@ -56,7 +56,11 @@ def sha256d(b: bytes) -> bytes:
 
 
 def jdump(s: str) -> str:
-    return json.dumps(s)
+    # ensure_ascii=False matches Go's encoding/json, which emits raw UTF-8 rather than
+    # \uXXXX escapes. Both sides rebuild the SAME signed bytes, so a model name with a
+    # non-ASCII character would otherwise make every receipt fail here while passing
+    # everywhere else.
+    return json.dumps(s, ensure_ascii=False)
 
 
 def verify(base: str, rid: str, rpc: str | None, contract: str | None,
@@ -98,25 +102,44 @@ def verify(base: str, rid: str, rpc: str | None, contract: str | None,
     ok = True
 
     # 1) worker receipt signature (skipped if the worker presented none)
+    #
+    # Two payload shapes exist. A token-billed request signs the ten-field shape; an
+    # asset-billed one (image / audio_second / character) signs a shape carrying the quantity and
+    # the asset digest instead of token counts, because it has none to attest. Which
+    # shape a signature claims is self-evident from the receipt: a quantity means the
+    # asset form.
     rec = p.get("record") or {}
     rcpt = rec.get("receipt")
+    rcpt_quantity = int((rcpt or {}).get("quantity") or 0)
     if rcpt and rcpt.get("sig"):
-        payload = ("{" +
-                   f'"cached_tokens":{rcpt["cached_tokens"]},'
-                   f'"completion_tokens":{rcpt["completion_tokens"]},'
-                   f'"model":{jdump(rcpt["model"])},'
-                   f'"prompt_tokens":{rcpt["prompt_tokens"]},'
-                   f'"pubkey":{jdump(rcpt["pubkey"])},'
-                   f'"request_id":{jdump(rcpt["request_id"])},'
-                   f'"request_sha256":{jdump(rcpt["request_sha256"])},'
-                   f'"response_sha256":{jdump(rcpt["response_sha256"])},'
-                   f'"ts":{rcpt["ts"]},'
-                   '"v":1}').encode()
+        if rcpt_quantity > 0:
+            payload = ("{" +
+                       f'"asset_hash":{jdump(rcpt.get("asset_hash", ""))},'
+                       f'"model":{jdump(rcpt["model"])},'
+                       f'"quantity":{rcpt_quantity},'
+                       f'"request_id":{jdump(rcpt["request_id"])},'
+                       f'"request_sha256":{jdump(rcpt["request_sha256"])},'
+                       f'"response_sha256":{jdump(rcpt["response_sha256"])},'
+                       f'"ts":{rcpt["ts"]},'
+                       '"v":1}').encode()
+        else:
+            payload = ("{" +
+                       f'"cached_tokens":{rcpt["cached_tokens"]},'
+                       f'"completion_tokens":{rcpt["completion_tokens"]},'
+                       f'"model":{jdump(rcpt["model"])},'
+                       f'"prompt_tokens":{rcpt["prompt_tokens"]},'
+                       f'"pubkey":{jdump(rcpt["pubkey"])},'
+                       f'"request_id":{jdump(rcpt["request_id"])},'
+                       f'"request_sha256":{jdump(rcpt["request_sha256"])},'
+                       f'"response_sha256":{jdump(rcpt["response_sha256"])},'
+                       f'"ts":{rcpt["ts"]},'
+                       '"v":1}').encode()
         try:
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
             Ed25519PublicKey.from_public_bytes(bytes.fromhex(rcpt["pubkey"])).verify(
                 bytes.fromhex(rcpt["sig"]), payload)
-            print("1) worker receipt signature ........ OK (ed25519)")
+            kind = "asset" if rcpt_quantity > 0 else "token"
+            print(f"1) worker receipt signature ........ OK (ed25519, {kind} payload)")
         except ImportError:
             # The signature is the root of the whole trust chain: a verifier
             # that skips it must not print VERIFIED. Fail loudly instead.
@@ -129,16 +152,36 @@ def verify(base: str, rid: str, rpc: str | None, contract: str | None,
         print("1) worker receipt signature ........ ABSENT (worker presented no receipt)")
 
     # 2) leaf reconstruction from the ledger record
+    #
+    # Mirrors check 1: the leaf shape follows the request's billing unit. A token
+    # record commits the frozen eight-field leaf; an asset-billed one commits
+    # {asset_hash, model, price_unit, quantity, request_id, sig, sp, wallet}.
     sig = (rcpt or {}).get("sig", "")
-    leaf_json = ("{" +
-                 f'"cached_tokens":{rec.get("cached_tokens", 0)},'
-                 f'"completion_tokens":{rec.get("completion_tokens", 0)},'
-                 f'"model":{jdump(rec.get("model", ""))},'
-                 f'"prompt_tokens":{rec.get("prompt_tokens", 0)},'
-                 f'"request_id":{jdump(rid)},'
-                 f'"sig":{jdump(sig)},'
-                 f'"sp":{jdump(leaf_sp(p))},'
-                 f'"wallet":{jdump(rec.get("wallet", ""))}' + "}").encode()
+    # The asset values: the signed receipt's when it attests a quantity, otherwise the
+    # gateway's own count and digest of the delivered asset (a record whose worker sent
+    # no receipt still commits what was delivered).
+    leaf_qty = rcpt_quantity or int(rec.get("quantity") or 0)
+    leaf_asset = (rcpt or {}).get("asset_hash", "") if rcpt_quantity > 0 else rec.get("asset_hash", "")
+    if leaf_qty > 0:
+        leaf_json = ("{" +
+                     f'"asset_hash":{jdump(leaf_asset)},'
+                     f'"model":{jdump(rec.get("model", ""))},'
+                     f'"price_unit":{jdump(leaf_unit(p))},'
+                     f'"quantity":{leaf_qty},'
+                     f'"request_id":{jdump(rid)},'
+                     f'"sig":{jdump(sig)},'
+                     f'"sp":{jdump(leaf_sp(p))},'
+                     f'"wallet":{jdump(rec.get("wallet", ""))}' + "}").encode()
+    else:
+        leaf_json = ("{" +
+                     f'"cached_tokens":{rec.get("cached_tokens", 0)},'
+                     f'"completion_tokens":{rec.get("completion_tokens", 0)},'
+                     f'"model":{jdump(rec.get("model", ""))},'
+                     f'"prompt_tokens":{rec.get("prompt_tokens", 0)},'
+                     f'"request_id":{jdump(rid)},'
+                     f'"sig":{jdump(sig)},'
+                     f'"sp":{jdump(leaf_sp(p))},'
+                     f'"wallet":{jdump(rec.get("wallet", ""))}' + "}").encode()
     leaf = hashlib.sha256(leaf_json).hexdigest()
     # A request settled as CARRIED DEBT commits an identity-only leaf: at settlement
     # time its billing record had already passed the scan cursor, so the Merkle tree
@@ -153,7 +196,11 @@ def verify(base: str, rid: str, rpc: str | None, contract: str | None,
     debt_leaf = hashlib.sha256(debt_json).hexdigest()
     if rec:
         if leaf == p["leaf"]:
-            print("2) leaf == sha256(record) .......... OK")
+            if leaf_qty > 0:
+                print(f"2) leaf == sha256(record) .......... OK (asset leaf: unit {leaf_unit(p) or '?'},"
+                      f" quantity {leaf_qty}, asset {str(leaf_asset)[:16]}…)")
+            else:
+                print("2) leaf == sha256(record) .......... OK")
         elif debt_leaf == p["leaf"]:
             print("2) leaf == sha256(record) .......... OK (debt leaf: identity-only commitment;"
                   " settled as carried debt, token counts not covered)")
@@ -222,6 +269,16 @@ def verify(base: str, rid: str, rpc: str | None, contract: str | None,
 def leaf_sp(p: dict) -> str:
     """The SP EVM payout address inside the leaf (served in the proof payload)."""
     return p.get("sp", "")
+
+
+def leaf_unit(p: dict) -> str:
+    """The billing unit inside the asset leaf (served in the proof payload).
+
+    Only non-token records carry it: a token record's unit is implied by its shape, and
+    it is not committed, so that every token proof made before units existed still
+    verifies byte-for-byte. An asset leaf always names its unit explicitly.
+    """
+    return p.get("price_unit", "")
 
 
 if __name__ == "__main__":

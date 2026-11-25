@@ -1,13 +1,13 @@
 {
   "name": "openmodel-contracts",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "main": "index.js",
   "scripts": {
     "test": "hardhat test"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "Apache-2.0",
   "description": "OpenModel settlement contract: prepaid balances, batch settlement, verifiable billing",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.2",

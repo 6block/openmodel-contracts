@@ -1,0 +1,21 @@
+{
+  "network": "calibration",
+  "chainId": 314159,
+  "version": "v1.4-unit-volume",
+  "address": "0x8Fd8478dfdb3B86F8536AAEd2448A94cb04fC992",
+  "deployTx": "0x7243bbf0f3f9c77464b3a4336f75f2cb87f7fdc167175360d4b6f4bc71e0ec1b",
+  "block": 4221004,
+  "platformFeeBps": 500,
+  "refundDelaySec": 3600,
+  "earningsFreezeSec": 604800,
+  "owner": "0x01ac683ab8A0DB80F1f05F79946cc4F65B490a08",
+  "operator": "0x01ac683ab8A0DB80F1f05F79946cc4F65B490a08",
+  "arbiter": "0x01ac683ab8A0DB80F1f05F79946cc4F65B490a08",
+  "stablecoins": [
+    "0xb3042734b608a1B16e9e86B374A3f3e389B4cDf0"
+  ],
+  "contractSchema": 4,
+  "deployedAt": "2026-11-06T09:17:39.928Z",
+  "purpose": "v1.4 per-unit settlement volume (token / image / audio_second / character)",
+  "supersedes": "0x97a3d202CfF60dD369cdf8F7D514dAe36b469852"
+}

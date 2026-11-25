@@ -2,8 +2,8 @@
   "network": "mainnet",
   "chainId": 314,
   "contract": "OpenModelSettlement",
-  "version": "v1.3-batch-stats",
-  "address": "0x60D41baEaBe1ABE061AE82c44425debc35bA524A",
+  "version": "v1.4-unit-volume",
+  "address": "0x29b994f63D91e447945a1cDeA2776167B7415c26",
   "deployer": "0x3934Ab3DCb874e5dd33768C66f94aa0EcA83DF3b",
   "owner": "0x3934Ab3DCb874e5dd33768C66f94aa0EcA83DF3b",
   "operator": "0x364960D9744364231c0c6577c7D75fB83C052735",
@@ -14,10 +14,14 @@
   "stablecoins": [
     "0x80B98d3aa09ffff255c3ba4A241111Ff1262F045"
   ],
-  "contractSchema": 3,
-  "deployTx": "0x7ad4b2067ea6bd47576dc42517c67c4c67a1956bbe7cd880e95c276e2b84ca10",
-  "blockNumber": 6256896,
-  "deployedAt": "2026-08-06T10:51:46.312Z",
-  "supersedes": "0x465d979675d401295C529e15dC9187c9b92ed4d1",
-  "note": "current live mainnet contract. v1.3 adds per-batch requestCount/tokenCount and cumulative counters; a gateway must run contract_schema: 3. Balances do not carry across deployments - anyone still holding a balance on the superseded instance reclaims it through that contract's refund path (see mainnet-v12-retired.json)."
+  "contractSchema": 4,
+  "deployTx": "0x3b45dc2fd35c40c7139ccbbcc93faa51a2152bfc8eaa566956167750eb40fd48",
+  "blockNumber": 6572691,
+  "deployedAt": "2026-11-24T02:29:01.835Z",
+  "supersedes": "0x60D41baEaBe1ABE061AE82c44425debc35bA524A",
+  "note": "current live mainnet contract. v1.4 settles per-unit volume (token / image / audio_second / character); a gateway must run contract_schema: 4. Balances do not carry across deployments - anyone still holding a balance on the superseded instance reclaims it through that contract's refund path (see mainnet-v13-retired.json).",
+  "sourceVerified": [
+    "https://filfox.info/en/address/0x29b994f63D91e447945a1cDeA2776167B7415c26",
+    "https://filecoin.blockscout.com/address/0x29b994f63D91e447945a1cDeA2776167B7415c26#code"
+  ]
 }
